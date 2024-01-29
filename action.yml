@@ -1,0 +1,68 @@
+# Copyright Jiaqi Liu
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+name: "Jersey Webservice Deployment"
+description: "Registers AMI and deploys AWS EC2 instance of Jersey webservice as immutable infrastructure through HashiCorp"
+branding:
+  icon: "package"
+  color: "orange"
+
+inputs:
+  template:
+    type: choice
+    description: Template to deploy
+    options:
+      - basic
+      - ssl
+      - jpa-basic
+      - jpa-ssl
+
+  hashicorp-dir:
+    description: "path to directory that contains the standard HashiCorp 'images'/'instances'/'scripts' folders; must NOT end with '/'"
+    required: true
+  aws-access-key-id:
+    description: "AWS Access Key ID"
+    required: true
+  aws-secret-access-key:
+    description: "AWS Secrete Access Key"
+    required: true
+  aws-region:
+    description: "The region in which the access key ID and Secret access key are valid"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Deployment environment setup
+      uses: QubitPi/hashicorp-aws/hashicorp/webservice/auxiliary/github/actions/cd-setup@master
+      with:
+        aws-ws-pkrvars-hcl: ${{ secrets.AWS_WS_PKRVARS_HCL }}
+        ssl-certificate: ${{ secrets.SSL_CERTIFICATE }}
+        ssl-certificate-key: ${{ secrets.SSL_CERTIFICATE_KEY }}
+        nginx-config-file: ${{ secrets.NGINX_CONFIG_FILE }}
+        aws-ws-tfvars: ${{ secrets.AWS_WS_TFVARS }}
+    - name: Generate webservice WAR file
+      run: mvn -B clean package
+      shell: bash
+    - name: Move WAR file to a location for HashiCorp deployment to pickup
+      run: mv target/astraios-1.0-SNAPSHOT.war ../hashicorp-aws/hashicorp/webservice/images/
+    - name: QubitPi/hashicorp-aws
+      uses: QubitPi/hashicorp-aws@master
+      with:
+        hashicorp-dir: ../hashicorp-aws/hashicorp/webservice
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
