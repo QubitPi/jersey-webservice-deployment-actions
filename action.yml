@@ -19,18 +19,16 @@ branding:
   color: "orange"
 
 inputs:
+  ssl:
+    type: boolean
+    description: Whether or not to enable SSL
+    required: true
   template:
-    type: choice2
+    type: choice
     description: Template to deploy
     options:
       - basic
-      - ssl
-      - jpa-basic
-      - jpa-ssl
-
-  hashicorp-dir:
-    description: "path to directory that contains the standard HashiCorp 'images'/'instances'/'scripts' folders; must NOT end with '/'"
-    required: true
+      - jpa
   aws-access-key-id:
     description: "AWS Access Key ID"
     required: true
@@ -40,25 +38,84 @@ inputs:
   aws-region:
     description: "The region in which the access key ID and Secret access key are valid"
     required: true
+  aws-ws-pkrvars-hcl:
+    description: 'HashiCorp Packer variable file'
+    required: true
+  aws-ws-tfvars:
+    description: 'HashiCorp Terraform variable file'
+    required: true
+
+  filebeat-config-file:
+    description: '(Optional) Filebeat config file'
+    required: false
+    default: ''
+
+  model-package-jar-group-id:
+    description: 'Maven group ID of JAR containing data models, e.g. "com.myorg"'
+    required: true
+  model-package-jar-artifact-id:
+    description: 'Maven artifact ID of JAR containing data models, e.g. "my-data-models"'
+    required: true
+  model-package-jar-version:
+    description: 'The version of JAR containing data models, e.g. "3.1.7"'
+    required: true
+  models-path:
+    description: 'The relative path to the data models repo, usually prefixed by "../". e.g. "../jpa-models"'
+    required: true
+
+  war-path:
+    description: 'The relative path to the webservice repo, e.g. "./target/myservice-1.0-SNAPSHOT.war"'
+    required: true
 
 runs:
   using: "composite"
   steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Deployment environment setup
-      uses: QubitPi/hashicorp-aws/hashicorp/webservice/auxiliary/github/actions/cd-setup@master
+
+    - name: Set up JDK
+      uses: QubitPi/hashicorp-aws/hashicorp/webservice/auxiliary/github/actions/jdk-setup@master
+
+    - name: Checkout HashiCorp deployment tool
+      shell: bash
+      run: git clone https://github.com/QubitPi/hashicorp-aws.git ../hashicorp-aws
+    - name: Load Packer variable file
+      run: echo '${{ inputs.aws-ws-pkrvars-hcl }}' > ../hashicorp-aws/hashicorp/webservice/images/aws-ws.auto.pkrvars.hcl
+      shell: bash
+    - name: Load Terraform variable file
+      run: echo '${{ inputs.aws-ws-tfvars }}' > ../hashicorp-aws/hashicorp/webservice/instances/aws-ws.auto.tfvars
+      shell: bash
+
+    - name: Configure SSL
+      if: ${{ inputs.ssl }}
+      uses: QubitPi/jersey-webservice-deployment-actions/.github/actions/ssl-setup@master
       with:
         aws-ws-pkrvars-hcl: ${{ secrets.AWS_WS_PKRVARS_HCL }}
         ssl-certificate: ${{ secrets.SSL_CERTIFICATE }}
         ssl-certificate-key: ${{ secrets.SSL_CERTIFICATE_KEY }}
         nginx-config-file: ${{ secrets.NGINX_CONFIG_FILE }}
         aws-ws-tfvars: ${{ secrets.AWS_WS_TFVARS }}
+
+    - name: Load Filebeat config file
+      if: "${{ inputs.filebeat-config-file != '' }}"
+      run: echo '${{ inputs.filebeat-config-file }}' > ../hashicorp-aws/hashicorp/webservice/images/filebeat.yml
+      shell: bash
+
+    - name: Install data-models
+      if: ${{ input.template == 'jps' }}
+      uses: QubitPi/hashicorp-aws/.github/actions/jersey-webservice-template/jpa-elide/install-data-models@master
+      with:
+        model-package-jar-group-id: com.qubitpi
+        model-package-jar-artifact-id: jersey-webservice-template-jpa-data-models
+        model-package-jar-version: 1.0.0
+        models-path: ../data-models
+
     - name: Generate webservice WAR file
       run: mvn -B clean package
       shell: bash
     - name: Move WAR file to a location for HashiCorp deployment to pickup
-      run: mv target/astraios-1.0-SNAPSHOT.war ../hashicorp-aws/hashicorp/webservice/images/
+      run: mv ${{ inputs.war-path }} ../hashicorp-aws/hashicorp/webservice/images/
+      shell: bash
     - name: QubitPi/hashicorp-aws
       uses: QubitPi/hashicorp-aws@master
       with:
