@@ -20,7 +20,7 @@ branding:
 
 inputs:
   template:
-    type: choice
+    type: choice2
     description: Template to deploy
     options:
       - basic
