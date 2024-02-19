@@ -113,7 +113,7 @@ runs:
 
     - name: Install data-models
       if: ${{ input.template == 'jps' }}
-      uses: QubitPi/hashicorp-aws/.github/actions/jersey-webservice-template/jpa-elide/install-data-models@master
+      uses: ./.github/actions/jersey-webservice-template/jpa-elide/install-data-models@master
       with:
         model-package-jar-group-id: com.qubitpi
         model-package-jar-artifact-id: jersey-webservice-template-jpa-data-models
